@@ -1,0 +1,385 @@
+
+
+<!DOCTYPE html>
+
+<html lang="tr">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Manav Stok Takip</title>
+
+<style>
+
+*{box-sizing:border-box}
+
+body{margin:0;background:#f2f5f3;font-family:Arial,sans-serif;color:#24352c}
+
+header{background:#16834a;color:white;padding:22px 16px}
+
+header h1{margin:0;font-size:24px}
+
+header p{margin:7px 0 0}
+
+main{padding:15px;max-width:850px;margin:auto}
+
+.card{background:white;border-radius:13px;padding:16px;margin-bottom:15px;box-shadow:0 2px 9px #0000000c}
+
+h2{font-size:18px;margin:0 0 14px}
+
+select,input,button{width:100%;padding:12px;margin:5px 0;border:1px solid #ddd;border-radius:8px;font-size:15px}
+
+button{background:#16834a;color:white;border:0;font-weight:bold}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+.stat{background:#e9f5ed;padding:14px;border-radius:10px}
+
+.stat small{color:#55715e}
+
+.stat strong{display:block;font-size:19px;margin-top:7px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+
+th,td{padding:10px 5px;text-align:left;border-bottom:1px solid #eee}
+
+th{color:#16834a}
+
+.delete{background:#d94343;padding:7px;font-size:12px}
+
+#status{font-size:13px;color:#666}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>🥬 Manav Stok Takip</h1>
+
+<p>5 Şubeli Yönetim Sistemi</p>
+
+</header>
+
+<main>
+
+<div class="card">
+
+<h2>📍 Şube Seçimi</h2>
+
+<select id="branch">
+
+<option value="Şube 1">1. Şube</option>
+
+<option value="Şube 2">2. Şube</option>
+
+<option value="Şube 3">3. Şube</option>
+
+<option value="Şube 4">4. Şube</option>
+
+<option value="Şube 5">5. Şube</option>
+
+</select>
+
+</div>
+
+<div class="stats">
+
+<div class="stat"><small>Toplam Ürün</small><strong id="count">0</strong></div>
+
+<div class="stat"><small>Toplam Stok</small><strong id="stock">0</strong></div>
+
+<div class="stat"><small>Alış Değeri</small><strong id="cost">0 TL</strong></div>
+
+<div class="stat"><small>Olası Kâr</small><strong id="profit">0 TL</strong></div>
+
+</div>
+
+<div class="card" style="margin-top:15px">
+
+<h2>➕ Yeni Ürün Ekle</h2>
+
+<input id="name" placeholder="Ürün adı (Örn: Domates)">
+
+<input id="quantity" type="number" min="0" step="0.01" placeholder="Stok miktarı (kg/adet)">
+
+<input id="buy" type="number" min="0" step="0.01" placeholder="Alış fiyatı (TL)">
+
+<input id="sell" type="number" min="0" step="0.01" placeholder="Satış fiyatı (TL)">
+
+<button onclick="addProduct()">Ürünü Kaydet</button>
+
+</div>
+
+<div class="card">
+
+<h2>📦 Şube Stok Listesi</h2>
+
+<div style="overflow-x:auto">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Ürün</th><th>Miktar</th><th>Alış</th><th>Satış</th><th>İşlem</th>
+
+</tr>
+
+</thead>
+
+<tbody id="products"></tbody>
+
+</table>
+
+</div>
+
+<p id="status">Firebase bağlantısı bekleniyor...</p>
+
+</div>
+
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+
+<script>
+
+const firebaseConfig = {
+
+ apiKey: "AIzaSyCcxARk_6qFbgx72RR1Pp3J66JPp8yjWdQ",
+
+ authDomain: "manav-stok.firebaseapp.com",
+
+ projectId: "manav-stok",
+
+ storageBucket: "manav-stok.firebasestorage.app",
+
+ messagingSenderId: "658470060026",
+
+ appId: "1:658470060026:web:65495a1d4ee31c51d0ae43"
+
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.firestore();
+
+let items = [];
+
+let unsubscribe = null;
+
+const branch = document.getElementById("branch");
+
+branch.addEventListener("change", loadProducts);
+
+function money(n){
+
+ return Number(n || 0).toLocaleString("tr-TR",
+
+ {minimumFractionDigits:2,maximumFractionDigits:2})+" TL";
+
+}
+
+function loadProducts(){
+
+ if(unsubscribe) unsubscribe();
+
+ document.getElementById("status").textContent="Veriler yükleniyor...";
+
+ unsubscribe = db.collection("products")
+
+ .where("branch","==",branch.value)
+
+ .onSnapshot(snapshot=>{
+
+   items=[];
+
+   snapshot.forEach(doc=>{
+
+     items.push({id:doc.id,...doc.data()});
+
+   });
+
+   render();
+
+   document.getElementById("status").textContent=
+
+   "Firebase bağlantısı başarılı ✓";
+
+ },error=>{
+
+   document.getElementById("status").textContent=
+
+   "Hata: "+error.message;
+
+ });
+
+}
+
+function render(){
+
+ const list=document.getElementById("products");
+
+ list.innerHTML="";
+
+ let totalStock=0;
+
+ let cost=0;
+
+ let profit=0;
+
+ items.forEach(p=>{
+
+   const q=Number(p.quantity)||0;
+
+   const b=Number(p.buy)||0;
+
+   const s=Number(p.sell)||0;
+
+   totalStock+=q;
+
+   cost+=q*b;
+
+   profit+=q*(s-b);
+
+   const tr=document.createElement("tr");
+
+   [p.name,q,b+" TL",s+" TL"].forEach(value=>{
+
+     const td=document.createElement("td");
+
+     td.textContent=value;
+
+     tr.appendChild(td);
+
+   });
+
+   const td=document.createElement("td");
+
+   const btn=document.createElement("button");
+
+   btn.className="delete";
+
+   btn.textContent="Sil";
+
+   btn.onclick=()=>deleteProduct(p.id);
+
+   td.appendChild(btn);
+
+   tr.appendChild(td);
+
+   list.appendChild(tr);
+
+ });
+
+ document.getElementById("count").textContent=items.length;
+
+ document.getElementById("stock").textContent=
+
+ totalStock.toLocaleString("tr-TR");
+
+ document.getElementById("cost").textContent=money(cost);
+
+ document.getElementById("profit").textContent=money(profit);
+
+ if(items.length===0){
+
+   list.innerHTML="<tr><td colspan='5'>Henüz ürün yok.</td></tr>";
+
+ }
+
+}
+
+async function addProduct(){
+
+ const name=document.getElementById("name").value.trim();
+
+ const quantity=Number(document.getElementById("quantity").value);
+
+ const buy=Number(document.getElementById("buy").value);
+
+ const sell=Number(document.getElementById("sell").value);
+
+ if(!name ||
+
+ document.getElementById("quantity").value==="" ||
+
+ document.getElementById("buy").value==="" ||
+
+ document.getElementById("sell").value==="" ||
+
+ !Number.isFinite(quantity) ||
+
+ !Number.isFinite(buy) ||
+
+ !Number.isFinite(sell) ||
+
+ quantity<0 || buy<0 || sell<0){
+
+   alert("Lütfen geçerli ürün bilgilerini girin.");
+
+   return;
+
+ }
+
+ try{
+
+   await db.collection("products").add({
+
+     name,quantity,buy,sell,
+
+     branch:branch.value,
+
+     createdAt:firebase.firestore.FieldValue.serverTimestamp()
+
+   });
+
+   document.getElementById("name").value="";
+
+   document.getElementById("quantity").value="";
+
+   document.getElementById("buy").value="";
+
+   document.getElementById("sell").value="";
+
+   alert("Ürün başarıyla kaydedildi!");
+
+ }catch(error){
+
+   alert("Kayıt hatası: "+error.message);
+
+ }
+
+}
+
+async function deleteProduct(id){
+
+ if(!confirm("Bu ürünü silmek istiyor musunuz?")) return;
+
+ try{
+
+   await db.collection("products").doc(id).delete();
+
+ }catch(error){
+
+   alert("Silme hatası: "+error.message);
+
+ }
+
+}
+
+loadProducts();
+
+</script>
+
+</body>
+
+</html>
